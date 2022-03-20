@@ -61,7 +61,7 @@ abstract contract LinearDutchAuction is Ownable {
     function setAuctionConfig(
         DutchAuctionConfig memory config,
         uint256 expectedReserve
-    ) public virtual onlyOwner {
+    ) internal {
         // Underflow might occur is size/num decreases is too large.
         unchecked {
             require(
