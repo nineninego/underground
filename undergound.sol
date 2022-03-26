@@ -7,24 +7,23 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "./AbstractERC1155.sol";
 import "./LinearDutchAuction.sol";
-import "./PaymentSplitter.sol";
 
 /*
 * @title 
 * @author
 */
-contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
+contract underground is AbstractERC1155, LinearDutchAuction {
 
     uint256 constant VERSION = 0;
-    uint256 constant MAX_SUPPLY = 1000;
+    uint256 constant public MAX_SUPPLY = 1000;
 
-    uint256 MAX_DEV_SUPPLY;
-    uint256 MAX_PRESALE_SUPPLY;
-    uint256 MAX_AUCTION_SUPPLY;
-    uint256 MAX_OPEN_SUPPLY;
+    uint256 public MAX_DEV_SUPPLY;
+    uint256 public MAX_PRESALE_SUPPLY;
+    uint256 public MAX_AUCTION_SUPPLY;
+    uint256 public MAX_OPEN_SUPPLY;
 
-    uint256 PRESALE_PRICE;
-    uint256 OPEN_PRICE;
+    uint256 public PRESALE_PRICE;
+    uint256 public OPEN_PRICE;
 
     enum Status {
         idle,
@@ -37,26 +36,26 @@ contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
     mapping(address => bool) public purchasedPerWallet;
 
     bytes32 public merkleRoot;
+    address recipient;
     event Purchased(uint256 indexed index, address indexed account, uint256 amount);
 
     constructor(
         string memory _name,
         string memory _symbol,
         string memory _uri,
-        address[] memory _payees,
-        uint256[] memory _shares
+        address _recipient
     )   ERC1155(_uri) 
-        PaymentSplitter(_payees, _shares) 
     {
         name_ = _name;
         symbol_ = _symbol;
+        recipient = _recipient;
     }
 
     modifier verifyConfig(
         uint256 _maxSupply, 
         Status _status
     ) {
-        require(purchasedPerStatus[_status] < _maxSupply, "underground: STATUS CAP REACHED");
+        require(purchasedPerStatus[_status] <= _maxSupply, "underground: STATUS CAP REACHED");
         _;
     }
 
@@ -66,10 +65,6 @@ contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
         require(!purchasedPerWallet[msg.sender],    "underground: ALREADY PURCHASED");
         require(msg.value >= _price,                "underground: INVALID VALUE SENT");
         _;
-    }
-
-    function _verifySupply() internal view returns(bool) {
-        return MAX_SUPPLY >= MAX_DEV_SUPPLY + MAX_PRESALE_SUPPLY + MAX_OPEN_SUPPLY + MAX_AUCTION_SUPPLY;
     }
 
     function grab(
@@ -136,7 +131,7 @@ contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
                 startPoint: 0, 
                 startPrice: _startPrice,
                 unit: AuctionIntervalUnit.Time,
-                decreaseInterval: _decreaseInterval, // 900 = 15 minutes
+                decreaseInterval: _decreaseInterval, // 60 = 1 minute
                 decreaseSize: _decreaseSize,
                 numDecreases: _numDecreases
             }),
@@ -171,8 +166,9 @@ contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
     }
 
     function purchaseAuction() external payable verifyPurchase(cost(1)) {
-        require(status == Status.auction,                           "undergound: AUCTION NOT STARTED");
-        require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,    "undergound: AUCTION SOLD OUT");
+        require(tx.origin == msg.sender,                                        "undergound: EOA ONLY");
+        require(status == Status.auction && dutchAuctionConfig.startPoint != 0, "undergound: AUCTION NOT STARTED");
+        require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,                "undergound: AUCTION SOLD OUT");
 
         purchasedPerWallet[msg.sender] = true;
         purchasedPerStatus[status]++;
@@ -189,14 +185,27 @@ contract underground is AbstractERC1155, LinearDutchAuction, PaymentSplitter  {
         _purchase(1);    
     }
 
+    function uri(uint256 _id) public view override returns (string memory) {
+        require(exists(_id), "URI: nonexistent token");
+        return string(abi.encodePacked(super.uri(_id), Strings.toString(_id)));
+    }
+
+    function changeRecipient(address _recipient) external onlyOwner {
+        recipient = _recipient;
+    }
+
+    function withdraw() external onlyOwner {
+        recipient.call{value: address(this).balance}("");
+    }
+    
     function _purchase(uint256 _amount) internal {
         require(totalSupply(VERSION) + _amount <= MAX_SUPPLY,       "underground: MAX SUPPLY REACHED");
         _mint(msg.sender, VERSION, _amount, "");
         emit Purchased(0, msg.sender, _amount);
     }
 
-    function uri(uint256 _id) public view override returns (string memory) {
-        require(exists(_id), "URI: nonexistent token");
-        return string(abi.encodePacked(super.uri(_id), Strings.toString(_id)));
+
+    function _verifySupply() internal view returns(bool) {
+        return MAX_SUPPLY >= MAX_DEV_SUPPLY + MAX_PRESALE_SUPPLY + MAX_OPEN_SUPPLY + MAX_AUCTION_SUPPLY;
     }
 }
