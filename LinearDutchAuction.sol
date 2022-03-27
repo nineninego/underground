@@ -92,7 +92,7 @@ abstract contract LinearDutchAuction is Ownable {
     }
 
     /// @notice Dutch-auction logic cost function.
-    function cost(uint256 n) public view returns (uint256) {
+    function cost(uint256 n) internal view returns (uint256) {
         DutchAuctionConfig storage cfg = dutchAuctionConfig;
         return n * (cfg.startPrice - Math.min((block.timestamp - cfg.startPoint) / cfg.decreaseInterval, cfg.numDecreases) * cfg.decreaseSize);
     }
