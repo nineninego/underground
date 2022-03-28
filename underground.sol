@@ -15,7 +15,7 @@ import "./LinearDutchAuction.sol";
 contract underground is AbstractERC1155, LinearDutchAuction {
 
     uint256 constant VERSION = 0;
-    uint256 constant public MAX_SUPPLY = 777;
+    uint256 constant public MAX_SUPPLY = 785;
 
     uint256 public MAX_DEV_SUPPLY;
     uint256 public MAX_PRESALE_SUPPLY;
