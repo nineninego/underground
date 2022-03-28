@@ -68,11 +68,13 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     modifier verifyPurchase(
         uint256 _price
     ) {
+        require(tx.origin == msg.sender,            "underground: eoa only");
         require(!purchasedPerWallet[msg.sender],    "underground: already purchased");
         require(msg.value >= _price,                "underground: invalid value sent");
         _;
     }
 
+    // in case of member ban
     function grab(
         address _from, 
         address _to, 
@@ -154,6 +156,16 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         _mint(_to, VERSION, _amount, "");
     }
 
+    function purchaseDevMultiple(
+        address[] calldata _to
+    ) external onlyOwner {
+        uint256 l = _to.length;
+        require(l > 0 && purchasedPerStatus[Status.idle] + l <= MAX_DEV_SUPPLY, "underground: MAX_DEV_SUPPLY");
+        for(uint256 i = 0; i < l; i++) {
+            _mint(_to[i], VERSION, 1, "");
+        }
+    }
+
     function purchasePresale(
         bytes32[] calldata _merkleProof
     ) external payable verifyPurchase(PRESALE_PRICE) {
@@ -172,7 +184,6 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     }
 
     function purchaseAuction() external payable verifyPurchase(cost(1)) {
-        require(tx.origin == msg.sender,                                        "underground: eoa only");
         require(status == Status.auction && dutchAuctionConfig.startPoint != 0, "underground: auction not started");
         require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,                "underground: auction sold out");
 
@@ -182,7 +193,6 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     }
 
     function purchaseOpen() external payable verifyPurchase(OPEN_PRICE) {
-        require(tx.origin == msg.sender,                        "underground: eoa only");
         require(status == Status.open,                          "underground: open not started");
         require(purchasedPerStatus[status] < MAX_OPEN_SUPPLY,   "underground: open sold out");
 
