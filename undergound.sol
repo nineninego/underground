@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 import "./AbstractERC1155.sol";
 import "./LinearDutchAuction.sol";
 
@@ -15,7 +15,7 @@ import "./LinearDutchAuction.sol";
 contract underground is AbstractERC1155, LinearDutchAuction {
 
     uint256 constant VERSION = 0;
-    uint256 constant public MAX_SUPPLY = 1000;
+    uint256 constant public MAX_SUPPLY = 777;
 
     uint256 public MAX_DEV_SUPPLY;
     uint256 public MAX_PRESALE_SUPPLY;
@@ -32,11 +32,12 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         open
     }
     Status public status = Status.idle;
-    mapping(Status => uint256) public purchasedPerStatus;
     mapping(address => bool) public purchasedPerWallet;
+    mapping(Status => uint256) public purchasedPerStatus;
 
+    address recipient;
     bytes32 public merkleRoot;
-    address public recipient;
+    mapping(address => bool) public isAdmin;
     event Purchased(uint256 indexed index, address indexed account, uint256 amount);
 
     constructor(
@@ -51,19 +52,24 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         recipient = _recipient;
     }
 
+    modifier onlyAdmin() {
+        require(isAdmin[msg.sender] || msg.sender == owner(), "underground: only admin");
+        _;
+    }
+
     modifier verifyConfig(
         uint256 _maxSupply, 
         Status _status
     ) {
-        require(purchasedPerStatus[_status] <= _maxSupply, "underground: STATUS CAP REACHED");
+        require(purchasedPerStatus[_status] <= _maxSupply, "underground: status cap reached");
         _;
     }
 
     modifier verifyPurchase(
         uint256 _price
     ) {
-        require(!purchasedPerWallet[msg.sender],    "underground: ALREADY PURCHASED");
-        require(msg.value >= _price,                "underground: INVALID VALUE SENT");
+        require(!purchasedPerWallet[msg.sender],    "underground: already purchased");
+        require(msg.value >= _price,                "underground: invalid value sent");
         _;
     }
 
@@ -77,20 +83,20 @@ contract underground is AbstractERC1155, LinearDutchAuction {
 
     function setMerkleRoot(
         bytes32 _merkleRoot
-    ) external onlyOwner {
+    ) external onlyAdmin {
         merkleRoot = _merkleRoot;
     }
 
     function setStatus(
         Status _status
-    ) external onlyOwner {
+    ) external onlyAdmin  {
         status = _status;
         super.setAuctionStartPoint(status == Status.auction ? block.timestamp : 0);
     }
 
     function setDevConfig(
         uint256 _maxSupply
-    ) external onlyOwner verifyConfig(_maxSupply, Status.idle) {
+    ) external onlyAdmin verifyConfig(_maxSupply, Status.idle) {
         MAX_DEV_SUPPLY = _maxSupply;
         require(_verifySupply(), "undergound: invalid MAX_SUPPLY");  
     }
@@ -98,7 +104,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     function setPresaleConfig(
         uint256 _price, 
         uint256 _maxSupply
-    ) external onlyOwner verifyConfig(_maxSupply, Status.presale) {
+    ) external onlyAdmin verifyConfig(_maxSupply, Status.presale) {
         MAX_PRESALE_SUPPLY = _maxSupply;
         require(_verifySupply(), "undergound: invalid MAX_SUPPLY");
 
@@ -108,7 +114,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     function setOpenConfig(
         uint256 _price, 
         uint256 _maxSupply
-    ) external onlyOwner verifyConfig(_maxSupply, Status.open) {
+    ) external onlyAdmin verifyConfig(_maxSupply, Status.open) {
         MAX_OPEN_SUPPLY = _maxSupply;
         require(_verifySupply(), "undergound: invalid MAX_SUPPLY");
 
@@ -122,7 +128,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         uint248 _numDecreases,
         uint256 _expectedReserve,
         uint256 _maxSupply
-    ) external onlyOwner verifyConfig(_maxSupply, Status.auction) {
+    ) external onlyAdmin verifyConfig(_maxSupply, Status.auction) {
         MAX_AUCTION_SUPPLY = _maxSupply;
         require(_verifySupply(), "undergound: invalid MAX_SUPPLY");
 
@@ -151,13 +157,13 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     function purchasePresale(
         bytes32[] calldata _merkleProof
     ) external payable verifyPurchase(PRESALE_PRICE) {
-        require(status == Status.presale,                           "undergound: PRESALE NOT STARTED");
-        require(purchasedPerStatus[status] < MAX_PRESALE_SUPPLY,    "undergound: PRESALE SOLD OUT");
+        require(status == Status.presale,                           "undergound: presale not started");
+        require(purchasedPerStatus[status] < MAX_PRESALE_SUPPLY,    "undergound: presale sold out");
 
         bytes32 node = keccak256(abi.encodePacked(VERSION, msg.sender));
         require(
             MerkleProof.verify(_merkleProof, merkleRoot, node),
-            "underground: Invalid proof"
+            "underground: invalid proof"
         );
 
         purchasedPerWallet[msg.sender] = true;
@@ -166,9 +172,9 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     }
 
     function purchaseAuction() external payable verifyPurchase(cost(1)) {
-        require(tx.origin == msg.sender,                                        "undergound: EOA ONLY");
-        require(status == Status.auction && dutchAuctionConfig.startPoint != 0, "undergound: AUCTION NOT STARTED");
-        require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,                "undergound: AUCTION SOLD OUT");
+        require(tx.origin == msg.sender,                                        "undergound: eoa only");
+        require(status == Status.auction && dutchAuctionConfig.startPoint != 0, "undergound: auction not started");
+        require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,                "undergound: auction sold out");
 
         purchasedPerWallet[msg.sender] = true;
         purchasedPerStatus[status]++;
@@ -176,9 +182,9 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     }
 
     function purchaseOpen() external payable verifyPurchase(OPEN_PRICE) {
-        require(tx.origin == msg.sender,                            "undergound: EOA ONLY");
-        require(status == Status.open,                              "undergound: OPEN NOT STARTED");
-        require(purchasedPerStatus[status] < MAX_OPEN_SUPPLY,       "undergound: OPEN SOLD OUT");
+        require(tx.origin == msg.sender,                        "undergound: eoa only");
+        require(status == Status.open,                          "undergound: open not started");
+        require(purchasedPerStatus[status] < MAX_OPEN_SUPPLY,   "undergound: open sold out");
 
         purchasedPerWallet[msg.sender] = true;
         purchasedPerStatus[status]++;
@@ -194,12 +200,23 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         recipient = _recipient;
     }
 
+    function addAdmin(address[] calldata _admins) external onlyOwner {
+        uint256 l = _admins.length;
+        for(uint256 i = 0; i < l; i++) {
+            isAdmin[_admins[i]] = true;
+        }
+    }
+
+    function removeAdmin(address _admin) external onlyOwner {
+        isAdmin[_admin] = false;
+    }
+
     function withdraw() external onlyOwner {
         recipient.call{value: address(this).balance}("");
     }
     
     function _purchase(uint256 _amount) internal {
-        require(totalSupply(VERSION) + _amount <= MAX_SUPPLY,       "underground: MAX SUPPLY REACHED");
+        require(totalSupply(VERSION) + _amount <= MAX_SUPPLY, "underground: MAX SUPPLY REACHED");
         _mint(msg.sender, VERSION, _amount, "");
         emit Purchased(0, msg.sender, _amount);
     }
