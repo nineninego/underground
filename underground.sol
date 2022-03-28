@@ -191,23 +191,31 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         _purchase(1);    
     }
 
-    function uri(uint256 _id) public view override returns (string memory) {
+    function uri(
+        uint256 _id
+    ) public view override returns (string memory) {
         require(exists(_id), "URI: nonexistent token");
         return string(abi.encodePacked(super.uri(_id), Strings.toString(_id)));
     }
 
-    function changeRecipient(address _recipient) external onlyOwner {
+    function changeRecipient(
+        address _recipient
+    ) external onlyOwner {
         recipient = _recipient;
     }
 
-    function addAdmin(address[] calldata _admins) external onlyOwner {
+    function addAdmin(
+        address[] calldata _admins
+    ) external onlyOwner {
         uint256 l = _admins.length;
         for(uint256 i = 0; i < l; i++) {
             isAdmin[_admins[i]] = true;
         }
     }
 
-    function removeAdmin(address _admin) external onlyOwner {
+    function removeAdmin(
+        address _admin
+    ) external onlyOwner {
         isAdmin[_admin] = false;
     }
 
@@ -215,7 +223,9 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         recipient.call{value: address(this).balance}("");
     }
     
-    function _purchase(uint256 _amount) internal {
+    function _purchase(
+        uint256 _amount
+    ) internal {
         require(totalSupply(VERSION) + _amount <= MAX_SUPPLY, "underground: MAX_SUPPLY reached");
         _mint(msg.sender, VERSION, _amount, "");
         emit Purchased(0, msg.sender, _amount);
