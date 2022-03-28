@@ -35,7 +35,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     mapping(address => bool) public purchasedPerWallet;
     mapping(Status => uint256) public purchasedPerStatus;
 
-    address recipient;
+    address public recipient;
     bytes32 public merkleRoot;
     mapping(address => bool) public isAdmin;
     event Purchased(uint256 indexed index, address indexed account, uint256 amount);
