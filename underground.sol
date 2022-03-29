@@ -2,248 +2,176 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "./Access.sol";
 import "./AbstractERC1155.sol";
-import "./LinearDutchAuction.sol";
 
-/*
-* @title 
-* @author
-*/
-contract underground is AbstractERC1155, LinearDutchAuction {
+contract underground is AbstractERC1155, Access {
 
-    uint256 constant SEASON = 1;
-    uint256 constant public MAX_SUPPLY = 785;
-
-    uint256 public MAX_DEV_SUPPLY;
-    uint256 public MAX_PRESALE_SUPPLY;
-    uint256 public MAX_AUCTION_SUPPLY;
-    uint256 public MAX_OPEN_SUPPLY;
-
-    uint256 public PRESALE_PRICE;
-    uint256 public OPEN_PRICE;
+    uint256 public SEASON;
+    uint256 public seasonCount;
 
     enum Status {
         idle,
-        presale,
+        whitelist,
         auction,
         open
     }
-    Status public status = Status.idle;
-    mapping(address => bool) public purchasedPerWallet;
-    mapping(Status => uint256) public purchasedPerStatus;
 
-    address public recipient;
-    bytes32 public merkleRoot;
-    mapping(address => bool) public isAdmin;
+    struct Season {
+        uint256 id;
+        uint256 maxSupply;
+        uint256 whitelistPrice;
+        uint256 openPrice;
+        DutchAuctionConfig dutchAuctionConfig;
+        bytes32 merkleRoot;
+    }
+
+    struct DutchAuctionConfig {
+        uint256 startPoint;
+        uint256 startPrice;
+        uint256 decreaseInterval;
+        uint256 decreaseSize;
+        uint256 numDecreases;
+    }
+
+    mapping(uint256 => Status) public status;
+    mapping(uint256 => Season) public seasons;
+    mapping(uint256 => mapping(address => bool)) mintedPerWallet;
     event Purchased(uint256 indexed index, address indexed account, uint256 amount);
 
     constructor(
         string memory _name,
         string memory _symbol,
-        string memory _uri,
-        address _recipient
+        string memory _uri
     )   ERC1155(_uri) 
     {
         name_ = _name;
         symbol_ = _symbol;
-        recipient = _recipient;
         transferOwnership(tx.origin);
     }
 
-    modifier onlyAdmin() {
-        require(isAdmin[msg.sender] || msg.sender == owner(), "underground: only admin");
+    modifier verifyMint(uint256 _price) {
+        require(tx.origin == msg.sender, "undergound: only eoa");
+        require(!mintedPerWallet[SEASON][msg.sender], "undergound: already minted");
+        require(msg.value >= _price, "undergound: invalid value sent");
         _;
     }
 
-    modifier verifyConfig(
-        uint256 _maxSupply, 
-        Status _status
-    ) {
-        require(purchasedPerStatus[_status] <= _maxSupply, "underground: status cap reached");
-        _;
+    function setStatus(uint256 _id, Status _status) external onlyAdmin {
+        require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
+        status[SEASON] = _status;
     }
 
-    modifier verifyPurchase(
-        uint256 _price
-    ) {
-        require(tx.origin == msg.sender,            "underground: eoa only");
-        require(!purchasedPerWallet[msg.sender],    "underground: already purchased");
-        require(msg.value >= _price,                "underground: invalid value sent");
-        _;
+    function setSeason(uint256 _id) public onlyAdmin {
+        require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
+        SEASON = _id;
     }
 
-    // in case of member ban
-    function grab(
-        address _from, 
-        address _to, 
-        uint256 _amount
-    ) external onlyOwner {
-        _safeTransferFrom(_from, _to, SEASON, _amount, "");
-    }
-
-    function setMerkleRoot(
+    function createNewSeason(
+        uint256 _maxSupply,
+        uint256 _whitelistPrice,
+        uint256 _openPrice,
+        DutchAuctionConfig memory _dutchAuctionConfig,
+        uint256 _expectedReserve,
         bytes32 _merkleRoot
     ) external onlyAdmin {
-        merkleRoot = _merkleRoot;
+        seasonCount++;
+        editSeason(seasonCount, _maxSupply, _whitelistPrice, _openPrice, _dutchAuctionConfig, _expectedReserve, _merkleRoot);
+        setSeason(seasonCount);
     }
 
-    function setStatus(
-        Status _status
-    ) external onlyAdmin  {
-        status = _status;
-        super.setAuctionStartPoint(status == Status.auction ? block.timestamp : 0);
-    }
-
-    function setDevConfig(
-        uint256 _maxSupply
-    ) external onlyAdmin verifyConfig(_maxSupply, Status.idle) {
-        MAX_DEV_SUPPLY = _maxSupply;
-        require(_verifySupply(), "underground: invalid MAX_SUPPLY");  
-    }
-
-    function setPresaleConfig(
-        uint256 _price, 
-        uint256 _maxSupply
-    ) external onlyAdmin verifyConfig(_maxSupply, Status.presale) {
-        MAX_PRESALE_SUPPLY = _maxSupply;
-        require(_verifySupply(), "underground: invalid MAX_SUPPLY");
-
-        PRESALE_PRICE = _price;
-    }
-
-    function setOpenConfig(
-        uint256 _price, 
-        uint256 _maxSupply
-    ) external onlyAdmin verifyConfig(_maxSupply, Status.open) {
-        MAX_OPEN_SUPPLY = _maxSupply;
-        require(_verifySupply(), "underground: invalid MAX_SUPPLY");
-
-        OPEN_PRICE = _price;
-    }
-
-    function setAuctionConfig(
-        uint256 _startPrice, 
-        uint256 _decreaseInterval,
-        uint256 _decreaseSize,
-        uint248 _numDecreases,
+    function editSeason(
+        uint256 _id,
+        uint256 _maxSupply,
+        uint256 _whitelistPrice,
+        uint256 _openPrice,
+        DutchAuctionConfig memory _dutchAuctionConfig,
         uint256 _expectedReserve,
-        uint256 _maxSupply
-    ) external onlyAdmin verifyConfig(_maxSupply, Status.auction) {
-        MAX_AUCTION_SUPPLY = _maxSupply;
-        require(_verifySupply(), "underground: invalid MAX_SUPPLY");
+        bytes32 _merkleRoot
+    ) public onlyAdmin {
+        require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
+        require(totalSupply(_id) <= seasons[_id].maxSupply, "undergound: invalid maxSupply");
+        require(_dutchAuctionConfig.decreaseInterval > 0, "underground: zero decrease interval");
+        unchecked {
+            require(_dutchAuctionConfig.startPrice - _dutchAuctionConfig.decreaseSize * _dutchAuctionConfig.numDecreases == _expectedReserve, "underground: incorrect reserve");
+        }
 
-        super.setAuctionConfig(           
-            LinearDutchAuction.DutchAuctionConfig({
-                startPoint: 0, 
-                startPrice: _startPrice,
-                unit: AuctionIntervalUnit.Time,
-                decreaseInterval: _decreaseInterval, // 60 = 1 minute
-                decreaseSize: _decreaseSize,
-                numDecreases: _numDecreases
-            }),
-            _expectedReserve
+        seasons[_id] = Season(
+            _id,
+            _maxSupply,
+            _whitelistPrice,
+            _openPrice,
+            _dutchAuctionConfig,
+            _merkleRoot
         );
     }
 
-    function purchaseDev(
-        uint256 _amount, 
-        address _to
-    ) external onlyOwner {
-        require(_amount > 0 && purchasedPerStatus[Status.idle] + _amount <= MAX_DEV_SUPPLY, "underground: MAX_DEV_SUPPLY");
-        purchasedPerStatus[Status.idle] += _amount;
+    function devMint(uint256 _amount, address _to) external onlyOwner {
+        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
         _mint(_to, SEASON, _amount, "");
     }
 
-    function purchaseDevMultiple(
-        address[] calldata _to
-    ) external onlyOwner {
+    function devMintMultiple(address[] calldata _to) external onlyOwner {
         uint256 l = _to.length;
-        require(l > 0 && purchasedPerStatus[Status.idle] + l <= MAX_DEV_SUPPLY, "underground: MAX_DEV_SUPPLY");
+        require(totalSupply(SEASON) + l <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
+
         for(uint256 i = 0; i < l; i++) {
             _mint(_to[i], SEASON, 1, "");
         }
     }
 
-    function purchasePresale(
-        bytes32[] calldata _merkleProof
-    ) external payable verifyPurchase(PRESALE_PRICE) {
-        require(status == Status.presale,                           "underground: presale not started");
-        require(purchasedPerStatus[status] < MAX_PRESALE_SUPPLY,    "underground: presale sold out");
+    function whitelistMint(bytes32[] calldata _merkleProof) external payable verifyMint(seasons[SEASON].whitelistPrice) {
+        require(status[SEASON] == Status.whitelist, "undergound: whitelist not started");
 
         bytes32 node = keccak256(abi.encodePacked(SEASON, msg.sender));
         require(
-            MerkleProof.verify(_merkleProof, merkleRoot, node),
+            MerkleProof.verify(_merkleProof, seasons[SEASON].merkleRoot, node),
             "underground: invalid proof"
         );
 
-        purchasedPerWallet[msg.sender] = true;
-        purchasedPerStatus[status]++;
-        _purchase(1);
+        mintedPerWallet[SEASON][msg.sender] = true;
+        _internalMint(1);
     }
 
-    function purchaseAuction() external payable verifyPurchase(cost(1)) {
-        require(status == Status.auction && dutchAuctionConfig.startPoint != 0, "underground: auction not started");
-        require(purchasedPerStatus[status] < MAX_AUCTION_SUPPLY,                "underground: auction sold out");
+    function auctionMint() external payable verifyMint(_cost(1)) {
+        require(status[SEASON] == Status.auction, "undergound: auction not started");
 
-        purchasedPerWallet[msg.sender] = true;
-        purchasedPerStatus[status]++;
-        _purchase(1);
+        mintedPerWallet[SEASON][msg.sender] = true;
+        _internalMint(1);
     }
 
-    function purchaseOpen() external payable verifyPurchase(OPEN_PRICE) {
-        require(status == Status.open,                          "underground: open not started");
-        require(purchasedPerStatus[status] < MAX_OPEN_SUPPLY,   "underground: open sold out");
+    function openMint() external payable verifyMint(seasons[SEASON].openPrice) {
+        require(status[SEASON] == Status.open, "undergound: auction not started");
 
-        purchasedPerWallet[msg.sender] = true;
-        purchasedPerStatus[status]++;
-        _purchase(1);    
+        mintedPerWallet[SEASON][msg.sender] = true;
+        _internalMint(1);
     }
 
-    function uri(
-        uint256 _id
-    ) public view override returns (string memory) {
+    function _internalMint(uint256 _amount) internal {
+        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
+        _mint(msg.sender, SEASON, _amount, "");
+
+        emit Purchased(SEASON, msg.sender, _amount);
+    }
+
+    function _cost(uint256 n) internal view returns (uint256) {
+        DutchAuctionConfig storage cfg = seasons[SEASON].dutchAuctionConfig;
+        return n * (cfg.startPrice - Math.min((block.timestamp - cfg.startPoint) / cfg.decreaseInterval, cfg.numDecreases) * cfg.decreaseSize);
+    }
+
+    function uri(uint256 _id) public view override returns (string memory) {
         require(exists(_id), "URI: nonexistent token");
         return string(abi.encodePacked(super.uri(_id), Strings.toString(_id)));
     }
 
-    function changeRecipient(
-        address _recipient
-    ) external onlyOwner {
-        recipient = _recipient;
-    }
-
-    function addAdmin(
-        address[] calldata _admins
-    ) external onlyOwner {
-        uint256 l = _admins.length;
-        for(uint256 i = 0; i < l; i++) {
-            isAdmin[_admins[i]] = true;
-        }
-    }
-
-    function removeAdmin(
-        address _admin
-    ) external onlyOwner {
-        isAdmin[_admin] = false;
-    }
+    function setURI(string memory baseURI) external onlyOwner {
+        _setURI(baseURI);
+    }  
 
     function withdraw() external onlyOwner {
-        recipient.call{value: address(this).balance}("");
-    }
-    
-    function _purchase(
-        uint256 _amount
-    ) internal {
-        require(totalSupply(SEASON) + _amount <= MAX_SUPPLY, "underground: MAX_SUPPLY reached");
-        _mint(msg.sender, SEASON, _amount, "");
-        emit Purchased(0, msg.sender, _amount);
-    }
-
-
-    function _verifySupply() internal view returns(bool) {
-        return MAX_SUPPLY >= MAX_DEV_SUPPLY + MAX_PRESALE_SUPPLY + MAX_OPEN_SUPPLY + MAX_AUCTION_SUPPLY;
+        owner().call{value: address(this).balance}("");
     }
 }
