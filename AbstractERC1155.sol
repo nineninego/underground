@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
-abstract contract AbstractERC1155 is ERC1155Supply, Ownable {
+abstract contract AbstractERC1155 is ERC1155Supply {
 
     string name_;
     string symbol_;   
-
-    function setURI(string memory baseURI) external onlyOwner {
-        _setURI(baseURI);
-    }    
 
     function name() public view returns (string memory) {
         return name_;
