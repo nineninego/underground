@@ -63,6 +63,10 @@ contract underground is AbstractERC1155, Access {
     function setStatus(uint256 _id, Status _status) external onlyAdmin {
         require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
         seasons[_id].status = _status;
+        if(_status == Status.auction) {
+            // start the auction
+            seasons[_id].dutchAuctionConfig.startPoint = block.timestamp;
+        }
     }
 
     function setSeason(uint256 _id) public onlyAdmin {
