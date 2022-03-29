@@ -53,9 +53,9 @@ contract underground is AbstractERC1155, Access {
     }
 
     modifier verifyMint(uint256 _price) {
-        require(tx.origin == msg.sender, "undergound: only eoa");
-        require(!mintedPerWallet[SEASON][msg.sender], "undergound: already minted");
-        require(msg.value >= _price, "undergound: invalid value sent");
+        require(tx.origin == msg.sender, "underground: only eoa");
+        require(!mintedPerWallet[SEASON][msg.sender], "underground: already minted");
+        require(msg.value >= _price, "underground: invalid value sent");
         _;
     }
 
@@ -96,7 +96,7 @@ contract underground is AbstractERC1155, Access {
         bytes32 _merkleRoot
     ) public onlyAdmin {
         require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
-        require(totalSupply(_id) <= seasons[_id].maxSupply, "undergound: invalid maxSupply");
+        require(totalSupply(_id) <= seasons[_id].maxSupply, "underground: invalid maxSupply");
         require(_dutchAuctionConfig.decreaseInterval > 0, "underground: zero decrease interval");
         unchecked {
             require(_dutchAuctionConfig.startPrice - _dutchAuctionConfig.decreaseSize * _dutchAuctionConfig.numDecreases == _expectedReserve, "underground: incorrect reserve");
@@ -114,13 +114,13 @@ contract underground is AbstractERC1155, Access {
     }
 
     function devMint(uint256 _amount, address _to) external onlyOwner {
-        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
+        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "underground: cap for season reached");
         _mint(_to, SEASON, _amount, "");
     }
 
     function devMintMultiple(address[] calldata _to) external onlyOwner {
         uint256 l = _to.length;
-        require(totalSupply(SEASON) + l <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
+        require(totalSupply(SEASON) + l <= seasons[SEASON].maxSupply, "underground: cap for season reached");
 
         for(uint256 i = 0; i < l; i++) {
             _mint(_to[i], SEASON, 1, "");
@@ -128,7 +128,7 @@ contract underground is AbstractERC1155, Access {
     }
 
     function whitelistMint(bytes32[] calldata _merkleProof) external payable verifyMint(seasons[SEASON].whitelistPrice) {
-        require(seasons[SEASON].status == Status.whitelist, "undergound: whitelist not started");
+        require(seasons[SEASON].status == Status.whitelist, "underground: whitelist not started");
 
         bytes32 node = keccak256(abi.encodePacked(SEASON, msg.sender));
         require(
@@ -139,12 +139,12 @@ contract underground is AbstractERC1155, Access {
     }
 
     function auctionMint() external payable verifyMint(_cost(1)) {
-        require(seasons[SEASON].status == Status.auction, "undergound: auction not started");
+        require(seasons[SEASON].status == Status.auction, "underground: auction not started");
         _internalMint(1);
     }
 
     function openMint() external payable verifyMint(seasons[SEASON].openPrice) {
-        require(seasons[SEASON].status == Status.open, "undergound: auction not started");
+        require(seasons[SEASON].status == Status.open, "underground: open not started");
         _internalMint(1);
     }
 
