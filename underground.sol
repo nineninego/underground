@@ -26,6 +26,7 @@ contract underground is AbstractERC1155, Access {
         uint256 whitelistPrice;
         uint256 openPrice;
         DutchAuctionConfig dutchAuctionConfig;
+        Status status;
         bytes32 merkleRoot;
     }
 
@@ -37,7 +38,6 @@ contract underground is AbstractERC1155, Access {
         uint256 numDecreases;
     }
 
-    mapping(uint256 => Status) public status;
     mapping(uint256 => Season) public seasons;
     mapping(uint256 => mapping(address => bool)) mintedPerWallet;
     event Purchased(uint256 indexed index, address indexed account, uint256 amount);
@@ -62,7 +62,7 @@ contract underground is AbstractERC1155, Access {
 
     function setStatus(uint256 _id, Status _status) external onlyAdmin {
         require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
-        status[SEASON] = _status;
+        seasons[_id].status = _status;
     }
 
     function setSeason(uint256 _id) public onlyAdmin {
@@ -105,6 +105,7 @@ contract underground is AbstractERC1155, Access {
             _whitelistPrice,
             _openPrice,
             _dutchAuctionConfig,
+            Status.idle,
             _merkleRoot
         );
     }
@@ -124,7 +125,7 @@ contract underground is AbstractERC1155, Access {
     }
 
     function whitelistMint(bytes32[] calldata _merkleProof) external payable verifyMint(seasons[SEASON].whitelistPrice) {
-        require(status[SEASON] == Status.whitelist, "undergound: whitelist not started");
+        require(seasons[SEASON].status == Status.whitelist, "undergound: whitelist not started");
 
         bytes32 node = keccak256(abi.encodePacked(SEASON, msg.sender));
         require(
@@ -137,14 +138,14 @@ contract underground is AbstractERC1155, Access {
     }
 
     function auctionMint() external payable verifyMint(_cost(1)) {
-        require(status[SEASON] == Status.auction, "undergound: auction not started");
+        require(seasons[SEASON].status == Status.auction, "undergound: auction not started");
 
         mintedPerWallet[SEASON][msg.sender] = true;
         _internalMint(1);
     }
 
     function openMint() external payable verifyMint(seasons[SEASON].openPrice) {
-        require(status[SEASON] == Status.open, "undergound: auction not started");
+        require(seasons[SEASON].status == Status.open, "undergound: auction not started");
 
         mintedPerWallet[SEASON][msg.sender] = true;
         _internalMint(1);
