@@ -132,29 +132,24 @@ contract underground is AbstractERC1155, Access {
             MerkleProof.verify(_merkleProof, seasons[SEASON].merkleRoot, node),
             "underground: invalid proof"
         );
-
-        mintedPerWallet[SEASON][msg.sender] = true;
         _internalMint(1);
     }
 
     function auctionMint() external payable verifyMint(_cost(1)) {
         require(seasons[SEASON].status == Status.auction, "undergound: auction not started");
-
-        mintedPerWallet[SEASON][msg.sender] = true;
         _internalMint(1);
     }
 
     function openMint() external payable verifyMint(seasons[SEASON].openPrice) {
         require(seasons[SEASON].status == Status.open, "undergound: auction not started");
-
-        mintedPerWallet[SEASON][msg.sender] = true;
         _internalMint(1);
     }
 
     function _internalMint(uint256 _amount) internal {
         require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
-        _mint(msg.sender, SEASON, _amount, "");
+        mintedPerWallet[SEASON][msg.sender] = true;
 
+        _mint(msg.sender, SEASON, _amount, "");
         emit Purchased(SEASON, msg.sender, _amount);
     }
 
