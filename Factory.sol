@@ -13,7 +13,7 @@ contract Factory {
         address _recipient
     ) public pure returns (bytes memory) {
         bytes memory bytecode = type(underground).creationCode;
-        return abi.encodePacked(bytecode, abi.encode(_name, _symbol, _uri, _recipient));
+        return abi.encodePacked(bytecode, abi.encode(_name, _symbol, _uri));
     }
 
     function getAddress(bytes memory bytecode, uint _salt) public view returns (address) {
