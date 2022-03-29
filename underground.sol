@@ -46,8 +46,7 @@ contract underground is AbstractERC1155, Access {
         string memory _name,
         string memory _symbol,
         string memory _uri
-    ) ERC1155(_uri) 
-    {
+    ) ERC1155(_uri) {
         name_ = _name;
         symbol_ = _symbol;
         transferOwnership(tx.origin);
