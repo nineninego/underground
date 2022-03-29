@@ -14,7 +14,7 @@ import "./LinearDutchAuction.sol";
 */
 contract underground is AbstractERC1155, LinearDutchAuction {
 
-    uint256 constant VERSION = 0;
+    uint256 constant SEASON = 1;
     uint256 constant public MAX_SUPPLY = 785;
 
     uint256 public MAX_DEV_SUPPLY;
@@ -50,6 +50,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         name_ = _name;
         symbol_ = _symbol;
         recipient = _recipient;
+        transferOwnership(tx.origin);
     }
 
     modifier onlyAdmin() {
@@ -80,7 +81,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         address _to, 
         uint256 _amount
     ) external onlyOwner {
-        _safeTransferFrom(_from, _to, VERSION, _amount, "");
+        _safeTransferFrom(_from, _to, SEASON, _amount, "");
     }
 
     function setMerkleRoot(
@@ -153,7 +154,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     ) external onlyOwner {
         require(_amount > 0 && purchasedPerStatus[Status.idle] + _amount <= MAX_DEV_SUPPLY, "underground: MAX_DEV_SUPPLY");
         purchasedPerStatus[Status.idle] += _amount;
-        _mint(_to, VERSION, _amount, "");
+        _mint(_to, SEASON, _amount, "");
     }
 
     function purchaseDevMultiple(
@@ -162,7 +163,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         uint256 l = _to.length;
         require(l > 0 && purchasedPerStatus[Status.idle] + l <= MAX_DEV_SUPPLY, "underground: MAX_DEV_SUPPLY");
         for(uint256 i = 0; i < l; i++) {
-            _mint(_to[i], VERSION, 1, "");
+            _mint(_to[i], SEASON, 1, "");
         }
     }
 
@@ -172,7 +173,7 @@ contract underground is AbstractERC1155, LinearDutchAuction {
         require(status == Status.presale,                           "underground: presale not started");
         require(purchasedPerStatus[status] < MAX_PRESALE_SUPPLY,    "underground: presale sold out");
 
-        bytes32 node = keccak256(abi.encodePacked(VERSION, msg.sender));
+        bytes32 node = keccak256(abi.encodePacked(SEASON, msg.sender));
         require(
             MerkleProof.verify(_merkleProof, merkleRoot, node),
             "underground: invalid proof"
@@ -236,8 +237,8 @@ contract underground is AbstractERC1155, LinearDutchAuction {
     function _purchase(
         uint256 _amount
     ) internal {
-        require(totalSupply(VERSION) + _amount <= MAX_SUPPLY, "underground: MAX_SUPPLY reached");
-        _mint(msg.sender, VERSION, _amount, "");
+        require(totalSupply(SEASON) + _amount <= MAX_SUPPLY, "underground: MAX_SUPPLY reached");
+        _mint(msg.sender, SEASON, _amount, "");
         emit Purchased(0, msg.sender, _amount);
     }
 
