@@ -59,8 +59,12 @@ contract underground is AbstractERC1155, Access {
         _;
     }
 
-    function setStatus(uint256 _id, Status _status) external onlyAdmin {
+    modifier verifySeasonId(uint256 _id) {
         require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
+        _;
+    }
+
+    function setStatus(uint256 _id, Status _status) external onlyAdmin verifySeasonId(_id) {
         seasons[_id].status = _status;
         if(_status == Status.auction) {
             // start the auction
@@ -68,7 +72,7 @@ contract underground is AbstractERC1155, Access {
         }
     }
 
-    function setSeason(uint256 _id) public onlyAdmin {
+    function setSeason(uint256 _id) public onlyAdmin verifySeasonId(_id) {
         require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
         SEASON = _id;
     }
@@ -94,8 +98,7 @@ contract underground is AbstractERC1155, Access {
         DutchAuctionConfig memory _dutchAuctionConfig,
         uint256 _expectedReserve,
         bytes32 _merkleRoot
-    ) public onlyAdmin {
-        require(_id > 0 && _id <= seasonCount, "underground: invalid season id");
+    ) public onlyAdmin verifySeasonId(_id) {
         require(totalSupply(_id) <= seasons[_id].maxSupply, "underground: invalid maxSupply");
         require(_dutchAuctionConfig.decreaseInterval > 0, "underground: zero decrease interval");
         unchecked {
@@ -111,6 +114,28 @@ contract underground is AbstractERC1155, Access {
             Status.idle,
             _merkleRoot
         );
+    }
+
+    function editWhitelist(uint256 _id, uint256 _whitelistPrice, bytes32 _merkleRoot) external onlyAdmin verifySeasonId(_id) {
+        seasons[_id].whitelistPrice = _whitelistPrice;
+        seasons[_id].merkleRoot = _merkleRoot;
+    }
+
+    function editOpen(uint256 _id, uint256 _openPrice) external onlyAdmin verifySeasonId(_id) {
+        seasons[_id].openPrice = _openPrice;
+    }
+
+    function editAuction(uint256 _id, DutchAuctionConfig memory _dutchAuctionConfig, uint256 _expectedReserve) external onlyAdmin verifySeasonId(_id) {
+        require(_dutchAuctionConfig.decreaseInterval > 0, "underground: zero decrease interval");
+        unchecked {
+            require(_dutchAuctionConfig.startPrice - _dutchAuctionConfig.decreaseSize * _dutchAuctionConfig.numDecreases == _expectedReserve, "underground: incorrect reserve");
+        }
+        seasons[_id].dutchAuctionConfig = _dutchAuctionConfig;
+    }
+
+    function editSupply(uint256 _id, uint256 _maxSupply) external onlyAdmin verifySeasonId(_id) {
+        require(totalSupply(_id) <= seasons[_id].maxSupply, "underground: invalid maxSupply");
+        seasons[_id].maxSupply = _maxSupply;
     }
 
     function devMint(uint256 _amount, address _to) external onlyOwner {
