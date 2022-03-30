@@ -111,7 +111,7 @@ contract underground is AbstractERC1155, Access {
             _whitelistPrice,
             _openPrice,
             _dutchAuctionConfig,
-            Status.idle,
+            seasons[_id].status,
             _merkleRoot
         );
     }
