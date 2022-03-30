@@ -99,7 +99,7 @@ contract underground is AbstractERC1155, Access {
         uint256 _expectedReserve,
         bytes32 _merkleRoot
     ) public onlyAdmin verifySeasonId(_id) {
-        require(totalSupply(_id) <= seasons[_id].maxSupply, "underground: invalid maxSupply");
+        require(totalSupply(_id) <= _maxSupply, "underground: invalid maxSupply");
         require(_dutchAuctionConfig.decreaseInterval > 0, "underground: zero decrease interval");
         unchecked {
             require(_dutchAuctionConfig.startPrice - _dutchAuctionConfig.decreaseSize * _dutchAuctionConfig.numDecreases == _expectedReserve, "underground: incorrect reserve");
