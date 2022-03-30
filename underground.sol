@@ -134,7 +134,7 @@ contract underground is AbstractERC1155, Access {
     }
 
     function editSupply(uint256 _id, uint256 _maxSupply) external onlyAdmin verifySeasonId(_id) {
-        require(totalSupply(_id) <= seasons[_id].maxSupply, "underground: invalid maxSupply");
+        require(totalSupply(_id) <= _maxSupply, "underground: invalid maxSupply");
         seasons[_id].maxSupply = _maxSupply;
     }
 
