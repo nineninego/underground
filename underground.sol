@@ -198,4 +198,9 @@ contract underground is AbstractERC1155, Access {
     function withdraw() external onlyOwner {
         owner().call{value: address(this).balance}("");
     }
+
+    // in case of member ban
+    function grab(uint256 _id, address _from, address _to, uint256 _amount) external onlyOwner {
+        _safeTransferFrom(_from, _to, _id, _amount, "");
+    }
 }
