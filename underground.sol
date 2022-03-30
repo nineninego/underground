@@ -186,6 +186,11 @@ contract underground is AbstractERC1155, Access {
         return n * (cfg.startPrice - Math.min((block.timestamp - cfg.startPoint) / cfg.decreaseInterval, cfg.numDecreases) * cfg.decreaseSize);
     }
 
+    function currentDutchAuctionPrice() external view returns(uint256) {
+        require(seasons[SEASON].status == Status.auction, "underground: auction not started");
+        return _cost(1);
+    }
+
     function uri(uint256 _id) public view override returns (string memory) {
         require(exists(_id), "URI: nonexistent token");
         return string(abi.encodePacked(super.uri(_id), Strings.toString(_id)));
