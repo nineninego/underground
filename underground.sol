@@ -174,7 +174,7 @@ contract underground is AbstractERC1155, Access {
     }
 
     function _internalMint(uint256 _amount) internal {
-        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "undergound: cap for season reached");
+        require(totalSupply(SEASON) + _amount <= seasons[SEASON].maxSupply, "underground: cap for season reached");
         mintedPerWallet[SEASON][msg.sender] = true;
 
         _mint(msg.sender, SEASON, _amount, "");
